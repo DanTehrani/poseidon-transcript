@@ -1,3 +1,5 @@
+use crate::poseidon::k256_consts;
+use crate::poseidon::k256_consts::{NUM_FULL_ROUNDS, NUM_PARTIAL_ROUNDS};
 use crate::poseidon::{Poseidon, PoseidonConstants};
 use ff::PrimeField;
 use std::result::Result;
@@ -15,21 +17,46 @@ pub struct PoseidonSponge<F: PrimeField> {
     pub absorb_pos: usize,
     pub squeeze_pos: usize,
     pub io_count: usize,
-    pub io_pattern: IOPattern,
+    pub io_pattern: Option<IOPattern>,
     pub rate: usize,
     pub capacity: usize,
     poseidon: Poseidon<F>,
 }
 
+pub enum SpongeCurve {
+    K256,
+}
+
 impl<F: PrimeField> PoseidonSponge<F> {
-    fn start(
-        io_pattern: IOPattern,
-        domain_separator: u32,
-        constants: PoseidonConstants<F>,
-    ) -> Self {
+    pub fn construct(curve: SpongeCurve, io_pattern: Option<IOPattern>) -> Self {
         // Compute the tag T
         // Set the permutation state to all zeros and add T
         // to the first 128 bits of the state
+
+        let constants = match curve {
+            SpongeCurve::K256 => {
+                let round_constants: Vec<F> = k256_consts::ROUND_CONSTANTS
+                    .iter()
+                    .map(|x| F::from_str_vartime(x).unwrap())
+                    .collect();
+
+                let mds_matrix: Vec<Vec<F>> = k256_consts::MDS_MATRIX
+                    .iter()
+                    .map(|x| {
+                        x.iter()
+                            .map(|y| F::from_str_vartime(y).unwrap())
+                            .collect::<Vec<F>>()
+                    })
+                    .collect();
+
+                PoseidonConstants::new(
+                    round_constants,
+                    mds_matrix,
+                    k256_consts::NUM_FULL_ROUNDS,
+                    k256_consts::NUM_PARTIAL_ROUNDS,
+                )
+            }
+        };
         let poseidon = Poseidon::new(constants);
 
         Self {
@@ -43,7 +70,7 @@ impl<F: PrimeField> PoseidonSponge<F> {
         }
     }
 
-    fn absorb(&mut self, x: &[F]) {
+    pub fn absorb(&mut self, x: &[F]) {
         if x.len() == 0 {
             return;
         }
@@ -63,10 +90,10 @@ impl<F: PrimeField> PoseidonSponge<F> {
         self.squeeze_pos = self.rate;
     }
 
-    fn squeeze(&mut self, length: usize) {
+    pub fn squeeze(&mut self, length: usize) -> Vec<F> {
         let mut y = Vec::with_capacity(length);
         if length == 0 {
-            return;
+            return vec![];
         }
 
         for _ in 0..length {
@@ -81,6 +108,7 @@ impl<F: PrimeField> PoseidonSponge<F> {
         }
 
         self.io_count += 1;
+        y
     }
 
     fn permute(&mut self) {
@@ -89,8 +117,13 @@ impl<F: PrimeField> PoseidonSponge<F> {
     }
 
     fn finish(&self) -> Result<(), String> {
-        if self.io_count != self.io_pattern.0.len() {
-            return Err("IO pattern mismatch".to_string());
+        match self.io_pattern {
+            None => return Ok(()),
+            Some(ref io_pattern) => {
+                if self.io_count != io_pattern.0.len() {
+                    return Err("IO pattern mismatch".to_string());
+                }
+            }
         }
 
         Ok(())
@@ -100,12 +133,11 @@ impl<F: PrimeField> PoseidonSponge<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::poseidon::k256_consts;
-    use crate::poseidon::k256_consts::{NUM_FULL_ROUNDS, NUM_PARTIAL_ROUNDS};
-    use secq256k1::field::field_secq::FieldElement as Fp;
+    //    use secq256k1::field::field_secq::FieldElement as Fp;
+    use halo2curves::secp256k1::Fp;
 
     #[test]
-    fn test_ip() {
+    fn test_interactive_protocol() {
         let io_pattern = IOPattern(vec![
             SpongeOp::Absorb(2),
             SpongeOp::Squeeze(1),
@@ -115,30 +147,7 @@ mod tests {
 
         let io = vec![vec![Fp::from(1), Fp::from(2)], vec![Fp::from(3)]].concat();
 
-        let round_constants: Vec<Fp> = k256_consts::ROUND_CONSTANTS
-            .iter()
-            .map(|x| Fp::from_str_vartime(x).unwrap())
-            .collect();
-
-        let mds_matrix: Vec<Vec<Fp>> = k256_consts::MDS_MATRIX
-            .iter()
-            .map(|x| {
-                x.iter()
-                    .map(|y| Fp::from_str_vartime(y).unwrap())
-                    .collect::<Vec<Fp>>()
-            })
-            .collect();
-
-        let mut sponge = PoseidonSponge::start(
-            io_pattern.clone(),
-            0,
-            PoseidonConstants::<Fp>::new(
-                round_constants,
-                mds_matrix,
-                NUM_FULL_ROUNDS,
-                NUM_PARTIAL_ROUNDS,
-            ),
-        );
+        let mut sponge = PoseidonSponge::construct(SpongeCurve::K256, Some(io_pattern.clone()));
 
         let mut io_position = 0;
         for op in io_pattern.0 {
@@ -147,7 +156,9 @@ mod tests {
                     sponge.absorb(&io[io_position..(io_position + l)]);
                     io_position += l;
                 }
-                SpongeOp::Squeeze(l) => sponge.squeeze(l),
+                SpongeOp::Squeeze(l) => {
+                    sponge.squeeze(l);
+                }
             }
         }
 

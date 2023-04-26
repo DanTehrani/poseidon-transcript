@@ -126,31 +126,30 @@ impl<F: PrimeField> Poseidon<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secq256k1::field::{field_secp, BaseField};
+    use halo2curves::secp256k1::Fp;
 
     #[test]
     fn test_k256() {
-        type Scalar = field_secp::FieldElement;
         let input = vec![
-            Scalar::from_str_vartime("1234567").unwrap(),
-            Scalar::from_str_vartime("109987").unwrap(),
+            Fp::from_str_vartime("1234567").unwrap(),
+            Fp::from_str_vartime("109987").unwrap(),
         ];
 
-        let round_constants: Vec<Scalar> = k256_consts::ROUND_CONSTANTS
+        let round_constants: Vec<Fp> = k256_consts::ROUND_CONSTANTS
             .iter()
-            .map(|x| Scalar::from_str_vartime(x).unwrap())
+            .map(|x| Fp::from_str_vartime(x).unwrap())
             .collect();
 
-        let mds_matrix: Vec<Vec<Scalar>> = k256_consts::MDS_MATRIX
+        let mds_matrix: Vec<Vec<Fp>> = k256_consts::MDS_MATRIX
             .iter()
             .map(|x| {
                 x.iter()
-                    .map(|y| Scalar::from_str_vartime(y).unwrap())
-                    .collect::<Vec<Scalar>>()
+                    .map(|y| Fp::from_str_vartime(y).unwrap())
+                    .collect::<Vec<Fp>>()
             })
             .collect();
 
-        let constants = PoseidonConstants::<Scalar>::new(
+        let constants = PoseidonConstants::<Fp>::new(
             round_constants,
             mds_matrix,
             k256_consts::NUM_FULL_ROUNDS,
@@ -163,7 +162,7 @@ mod tests {
 
         assert_eq!(
             digest,
-            Scalar::from_bytes(&[
+            Fp::from_bytes(&[
                 68, 120, 17, 40, 199, 247, 48, 80, 236, 89, 92, 44, 207, 217, 83, 62, 184, 194,
                 173, 48, 66, 119, 238, 98, 175, 232, 78, 234, 75, 101, 229, 148
             ])
