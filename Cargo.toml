@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 ff = "0.12.0"
 halo2curves = { git = "https://github.com/DanTehrani/halo2curves", branch = "secq256k1" }
+sha3 = "0.10.7"

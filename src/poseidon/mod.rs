@@ -1,5 +1,4 @@
 pub(crate) mod k256_consts;
-
 use ff::PrimeField;
 
 pub struct PoseidonConstants<F: PrimeField> {
@@ -32,8 +31,7 @@ pub struct Poseidon<F: PrimeField> {
 }
 
 impl<F: PrimeField> Poseidon<F> {
-    pub fn new(constants: PoseidonConstants<F>) -> Self {
-        let state = vec![F::zero(); 3];
+    pub fn new(constants: PoseidonConstants<F>, state: Vec<F>) -> Self {
         Self {
             state,
             constants,
@@ -156,7 +154,8 @@ mod tests {
             k256_consts::NUM_PARTIAL_ROUNDS,
         );
 
-        let mut poseidon = Poseidon::new(constants);
+        let state = vec![Fp::zero(); 3];
+        let mut poseidon = Poseidon::new(constants, state);
 
         let digest = poseidon.hash(input);
 
